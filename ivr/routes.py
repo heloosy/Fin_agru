@@ -65,7 +65,7 @@ def welcome():
 @ivr_bp.route("/set-language", methods=["POST"])
 def set_language():
     call_sid = request.form.get("CallSid", "unknown")
-    digit    = request.form.get("Digits", "1")
+    digit    = request.form.get("Digits", "1").strip()
     lang     = "TH" if digit == "2" else "EN"
     session.update(call_sid, lang=lang)
 
@@ -82,7 +82,7 @@ def set_language():
         gather.say(
             "ยอดเยี่ยมมาก ฉันพร้อมช่วยเหลือคุณแล้ว กด 1 สำหรับการปรึกษาด้านการเกษตรอย่างรวดเร็ว "
             "กด 2 เพื่อรับการออกแบบแผนการเกษตรแบบมืออาชีพสำหรับพื้นที่ของคุณโดยเฉพาะ",
-            voice="alice", language="th-TH"
+            voice="Polly.Kanya", language="th-TH"
         )
 
     resp.append(gather)
@@ -95,7 +95,7 @@ def set_language():
 @ivr_bp.route("/set-mode", methods=["POST"])
 def set_mode():
     call_sid = request.form.get("CallSid", "unknown")
-    digit    = request.form.get("Digits", "1")
+    digit    = request.form.get("Digits", "1").strip()
     lang     = session.get_lang(call_sid)
     mode     = "detailed" if digit == "2" else "quick"
     session.update(call_sid, mode=mode)
@@ -199,7 +199,7 @@ def quickreply():
 @ivr_bp.route("/quickchat-again", methods=["POST"])
 def quickchat_again():
     call_sid = request.form.get("CallSid", "unknown")
-    digit    = request.form.get("Digits", "2")
+    digit    = request.form.get("Digits", "2").strip()
     resp     = VoiceResponse()
     if digit == "1":
         resp.redirect("/ivr/quickchat")
