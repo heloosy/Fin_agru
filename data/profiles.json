@@ -1,0 +1,10 @@
+{
+  "+66812345678": {
+    "name": "Lily",
+    "location": "Thailand",
+    "past_crop": "Unknown",
+    "current_crop": "Unknown",
+    "soil_type": "Clay",
+    "terrain": "Hilly"
+  }
+}
