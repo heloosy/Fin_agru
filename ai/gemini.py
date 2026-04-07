@@ -250,10 +250,31 @@ def analyze_image(lang: str, image_url: str, twilio_sid: str, twilio_token: str)
     start_time = time.time()
     try:
         print(f"📸 VISION: Starting download from {image_url[:50]}...")
-        response = requests.get(image_url, auth=(twilio_sid, twilio_token), timeout=10)
-        response.raise_for_status()
+        
+        # Try with Twilio credentials first
+        use_auth = bool(twilio_sid and twilio_token 
+                        and not twilio_sid.startswith("ACxxx")
+                        and twilio_token != "your_auth_token_here")
+        
+        response = None
+        if use_auth:
+            try:
+                response = requests.get(image_url, auth=(twilio_sid, twilio_token), timeout=15)
+                response.raise_for_status()
+                print(f"✅ VISION: Image downloaded with Twilio auth ({len(response.content)} bytes)")
+            except requests.exceptions.HTTPError as auth_err:
+                print(f"⚠️ VISION: Auth download failed ({auth_err}). Trying without auth...")
+                response = None
+        
+        # Fallback: try without auth (Twilio media URLs are sometimes publicly accessible)
+        if response is None:
+            print("📸 VISION: Attempting download without auth credentials...")
+            response = requests.get(image_url, timeout=15)
+            response.raise_for_status()
+            print(f"✅ VISION: Image downloaded without auth ({len(response.content)} bytes)")
+        
         img_data = response.content
-        print(f"✅ VISION: Image downloaded ({len(img_data)} bytes) in {time.time() - start_time:.2f}s")
+        print(f"✅ VISION: Total download time: {time.time() - start_time:.2f}s")
 
         prompt_text = prompts.image_prompt(lang)
         
@@ -454,7 +475,8 @@ def split_message(text: str, limit: int = 1500) -> list:
 
 def _handle_err(lang: str, e: Exception) -> str:
     """Consistently handle errors and return a string."""
-    msg = str(e)[:100]
+    # Always log the REAL error to the console so it's visible in server logs
+    print(f"🔴 _handle_err called: [{type(e).__name__}] {str(e)[:200]}")
     if lang == "TH":
         return f"ขอโทษครับ ตอนนี้ระบบ AI ไม่ว่างชั่วคราว กรุณาลองใหม่อีกครั้งในภายหลัง"
     return f"I'm sorry, my AI processing is currently at capacity. Please try your request again in a few moments!"
