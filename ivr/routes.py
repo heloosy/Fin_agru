@@ -25,8 +25,8 @@ def _say(resp: VoiceResponse, text: str, lang: str) -> None:
     if lang == "EN":
         resp.say(text, voice="Polly.Joanna", language="en-US")
     else:
-        # 🎙️ UPGRADE: Use Polly.Kanya (premium Thai) instead of 'alice'
-        resp.say(text, voice="Polly.Kanya", language="th-TH")
+        # Using 'alice' for maximum compatibility as per user feedback
+        resp.say(text, voice="alice", language="th-TH")
 
 
 def _twiml(resp: VoiceResponse) -> Response:
@@ -54,7 +54,7 @@ def welcome():
     )
     gather.say(
         "ยินดีต้อนรับสู่ AgriSpark 2.0 หุ้นส่วนต้นคิดเพื่อการเกษตรของคุณ กด 1 สำหรับภาษาอังกฤษ กด 2 สำหรับภาษาไทย",
-        voice="Polly.Kanya", language="th-TH"
+        voice="alice", language="th-TH"
     )
     resp.append(gather)
     # Fallback if no input
@@ -82,7 +82,7 @@ def set_language():
         gather.say(
             "ยอดเยี่ยมมาก ฉันพร้อมช่วยเหลือคุณแล้ว กด 1 สำหรับการปรึกษาด้านการเกษตรอย่างรวดเร็ว "
             "กด 2 เพื่อรับการออกแบบแผนการเกษตรแบบมืออาชีพสำหรับพื้นที่ของคุณโดยเฉพาะ",
-            voice="Polly.Kanya", language="th-TH"
+            voice="alice", language="th-TH"
         )
 
     resp.append(gather)
@@ -146,8 +146,8 @@ def _say_gather(gather, text: str, lang: str):
     if lang == "EN":
         gather.say(text, voice="Polly.Joanna", language="en-US")
     else:
-        # 🎙️ UPGRADE: Use Polly.Kanya (premium Thai) instead of 'alice'
-        gather.say(text, voice="Polly.Kanya", language="th-TH")
+        # Using 'alice' for maximum compatibility as per user feedback
+        gather.say(text, voice="alice", language="th-TH")
 
 
 @ivr_bp.route("/quickreply", methods=["POST"])
