@@ -54,7 +54,7 @@ def welcome():
     )
     gather.say(
         "ยินดีต้อนรับสู่ AgriSpark 2.0 หุ้นส่วนต้นคิดเพื่อการเกษตรของคุณ กด 1 สำหรับภาษาอังกฤษ กด 2 สำหรับภาษาไทย",
-        voice="alice", language="th-TH"
+        voice="Polly.Kanya", language="th-TH"
     )
     resp.append(gather)
     # Fallback if no input
