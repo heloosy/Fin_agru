@@ -74,12 +74,15 @@ def delete(session_id):
         _save_sessions()
 
 def get_lang(session_id):
+    _ensure_sessions_loaded()
     return _SESSIONS.get(session_id, {}).get("lang", "EN")
 
 def get_step(session_id):
+    _ensure_sessions_loaded()
     return _SESSIONS.get(session_id, {}).get("step", 1)
 
 def increment_step(session_id):
+    _ensure_sessions_loaded()
     curr = get_step(session_id)
     update(session_id, step=curr + 1)
 
