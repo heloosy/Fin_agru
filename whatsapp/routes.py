@@ -67,23 +67,34 @@ def whatsapp_webhook():
 
         # ─── Image received ───────────────────────────────────────────────────────
         if num_media > 0 and media_url and "image" in media_type:
-            try:
-                print(f"📸 WHATSAPP: Processing incoming image from {from_number}...")
-                analysis = gemini.analyze_image(
-                    lang, media_url,
-                    config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN
-                )
-                session.append_wa_history(from_number, "user", "[Image sent]")
-                session.append_wa_history(from_number, "model", analysis)
-                
-                # 🧩 Split and send chunks (Fix for Error 21617)
-                for chunk in gemini.split_message(analysis):
-                    resp.message(chunk)
-                return Response(str(resp), mimetype="application/xml")
-            except Exception as vision_e:
-                print(f"❌ WHATSAPP VISION ERROR: {vision_e}")
-                resp.message("⚠️ I saw your photo but had trouble analyzing it. Please try again or check my logs!" if lang == "EN" else "⚠️ ฉันเห็นภาพของคุณแล้ว แต่มีปัญหาในการวิเคราะห์ กรุณาลองใหม่อีกครั้ง")
-                return Response(str(resp), mimetype="application/xml")
+            def process_image_background():
+                try:
+                    from utils.delivery import send_whatsapp_text
+                    print(f"📸 WHATSAPP ASYNC: Processing arriving image from {from_number}...")
+                    analysis = gemini.analyze_image(
+                        lang, media_url,
+                        config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN
+                    )
+                    session.append_wa_history(from_number, "user", "[Image sent]")
+                    session.append_wa_history(from_number, "model", analysis)
+                    
+                    # 🧩 Split and send chunks back asynchronously via REST API
+                    for chunk in gemini.split_message(analysis):
+                        send_whatsapp_text(from_number, chunk)
+                except Exception as vision_e:
+                    print(f"❌ WHATSAPP VISION ERROR: {vision_e}")
+                    from utils.delivery import send_whatsapp_text
+                    err_msg = "⚠️ I saw your photo but had trouble analyzing it. Please try again or check my logs!" if lang == "EN" else "⚠️ ฉันเห็นภาพของคุณแล้ว แต่มีปัญหาในการวิเคราะห์ กรุณาลองใหม่อีกครั้ง"
+                    send_whatsapp_text(from_number, err_msg)
+
+            # Start worker thread
+            import threading
+            threading.Thread(target=process_image_background).start()
+            
+            # Immediately Return 200 OK to Twilio so it DOES NOT timeout with Error 11200 or 502
+            ack_msg = "🔍 I've received your image! Let me look at it closely. (This takes about 30 seconds...)" if lang == "EN" else "🔍 รับรูปภาพเรียบร้อยครับ! ขอเวลาวิเคราะห์อย่างละเอียดสัก 30 วินาทีนะ..."
+            resp.message(ack_msg)
+            return Response(str(resp), mimetype="application/xml")
 
         # ─── Text commands ────────────────────────────────────────────────────────
         body_lower = body.lower().strip()
