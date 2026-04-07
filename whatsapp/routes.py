@@ -83,8 +83,12 @@ def whatsapp_webhook():
                         send_whatsapp_text(from_number, chunk)
                 except Exception as vision_e:
                     print(f"❌ WHATSAPP VISION ERROR: {vision_e}")
+                    import traceback
+                    print(traceback.format_exc())
+                    
                     from utils.delivery import send_whatsapp_text
-                    err_msg = "⚠️ I saw your photo but had trouble analyzing it. Please try again or check my logs!" if lang == "EN" else "⚠️ ฉันเห็นภาพของคุณแล้ว แต่มีปัญหาในการวิเคราะห์ กรุณาลองใหม่อีกครั้ง"
+                    err_msg = (f"⚠️ Sorry, I had trouble processing that image. Error: {str(vision_e)[:50]}" 
+                               if lang == "EN" else "⚠️ ฉันเห็นภาพของคุณแล้ว แต่มีปัญหาในการประมวลผล กรุณาลองใหม่อีกครั้ง")
                     send_whatsapp_text(from_number, err_msg)
 
             # Start worker thread
