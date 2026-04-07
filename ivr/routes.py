@@ -4,6 +4,7 @@ All Twilio Voice webhook endpoints.
 """
 
 import config
+import threading
 from flask import Blueprint, request, Response
 from twilio.twiml.voice_response import VoiceResponse, Gather
 
@@ -24,7 +25,8 @@ def _say(resp: VoiceResponse, text: str, lang: str) -> None:
     if lang == "EN":
         resp.say(text, voice="Polly.Joanna", language="en-US")
     else:
-        resp.say(text, voice="alice", language="th-TH")
+        # 🎙️ UPGRADE: Use Polly.Kanya (premium Thai) instead of 'alice'
+        resp.say(text, voice="Polly.Kanya", language="th-TH")
 
 
 def _twiml(resp: VoiceResponse) -> Response:
@@ -144,7 +146,8 @@ def _say_gather(gather, text: str, lang: str):
     if lang == "EN":
         gather.say(text, voice="Polly.Joanna", language="en-US")
     else:
-        gather.say(text, voice="alice", language="th-TH")
+        # 🎙️ UPGRADE: Use Polly.Kanya (premium Thai) instead of 'alice'
+        gather.say(text, voice="Polly.Kanya", language="th-TH")
 
 
 @ivr_bp.route("/quickreply", methods=["POST"])
@@ -316,106 +319,90 @@ def complete():
     call_sid = request.form.get("CallSid", "unknown")
     lang     = session.get_lang(call_sid)
     
-    # 🧠 SMART RECEIVER: Identify the human number (Farmer)
-    # If we called them (outbound), the farmer is 'To'. 
-    # If they called us (inbound), the farmer is 'From'.
-    from_no = request.form.get("From", "")
-    to_no   = request.form.get("To", "")
+    from_no  = request.form.get("From", "")
+    to_no    = request.form.get("To", "")
     
-    system_nos = [config.TWILIO_PHONE.strip(), config.TWILIO_WHATSAPP.replace("whatsapp:", "").strip()]
-    
-    # The farmer is the number that is NOT our system number
-    farmer_no = from_no
-    if from_no.strip() in system_nos:
-        farmer_no = to_no
-
-    sess     = session.get(call_sid)
-
-    profile = {
-        "name":         sess.get("name",         "Farmer"),
-        "location":     sess.get("location",      "Unknown"),
-        "past_crop":    sess.get("past_crop",     "Unknown"),
-        "current_crop": sess.get("current_crop",  "Unknown"),
-        "soil_type":    sess.get("soil_type",     "Unknown"),
-        "terrain":      sess.get("terrain",       "Unknown"),
-    }
-
-    # 🏛️ MASTER MEMORY SYNC: Save profile to persistent phone-linked archive
-    if farmer_no:
-        session.save_farmer_profile(farmer_no, profile)
-        print(f"📡 AGENTIC SYNC: Linked IVR data to Master Archive for {farmer_no}")
+    # 🧠 ASYNC POWER-UP: Launch heavy processing in a background thread ⚡
+    # This prevents Twilio's "Application Error" (Timeout) while AI & PDF generate.
+    thread = threading.Thread(
+        target=_process_complete,
+        args=(call_sid, lang, from_no, to_no)
+    )
+    thread.daemon = True
+    thread.start()
 
     resp = VoiceResponse()
-
-    try:
-        # 1. Get weather context
-        weather = get_weather_summary(profile["location"])
-
-        # 2. Generate AI plan
-        plan_text = gemini.generate_farm_plan(lang, profile, weather)
-
-        # 3. Generate PDF
-        pdf_path = generate_pdf(profile, plan_text, lang)
-        pdf_url  = get_pdf_url(pdf_path)
-
-        # 4. Generate SMS summary
-        sms_text = generate_sms_summary(lang, profile, plan_text[:500])
-
-        # 5. Send WhatsApp PDF
-        if farmer_no:
-            print(f"📡 AGENTIC DELIVERY: Sending PDF to {farmer_no}")
-            print(f"📄 PDF URL: {pdf_url}")
-            
-            # NOTE: If BASE_URL is localhost, Twilio will fail to download this PDF.
-            if "localhost" in pdf_url or "127.0.0.1" in pdf_url:
-                print("⚠️ WARNING: Localhost URL detected. Twilio cannot send this media via WhatsApp.")
-
-            try:
-                # 5.5 Generate Medium-Detail WhatsApp Summary
-                print("📡 AGENTIC VOICE: Generating WhatsApp executive summary...")
-                wa_body = gemini.generate_wa_summary(lang, plan_text)
-                
-                send_whatsapp_pdf(farmer_no, wa_body, pdf_url)
-                print("✅ WhatsApp PDF Sent Successfully!")
-            except Exception as wa_err:
-                print(f"❌ WhatsApp PDF Error: {wa_err}")
-
-            # 6. Send SMS summary
-            try:
-                send_sms(farmer_no, sms_text)
-                print("✅ SMS Summary Sent Successfully!")
-            except Exception as sms_err:
-                print(f"❌ SMS Summary Error: {sms_err}")
-
-        # 7. Read a conversational spoken summary over the phone
-        print("📡 AGENTIC VOICE: Generating conversational wrap-up...")
-        spoken_summary = gemini.generate_voice_summary(lang, plan_text)
-        _say(resp, spoken_summary, lang)
-
-    except Exception as e:
-        error_msg = (
-            "I'm sorry, I encountered an error generating your plan. "
-            "Please WhatsApp us for support."
-            if lang == "EN"
-            else "ขอโทษ เกิดข้อผิดพลาดในการสร้างแผน กรุณาติดต่อเราทาง WhatsApp"
-        )
-        _say(resp, error_msg, lang)
-
-    resp.redirect("/ivr/goodbye")
-    session.delete(call_sid)
+    msg = (
+        "Thank you! I am generating your personalised farm plan now. "
+        "It will be sent to your WhatsApp in just a moment. Goodbye!"
+        if lang == "EN"
+        else "ขอบคุณ! ฉันกำลังสร้างแผนการเกษตรส่วนตัวของคุณ "
+             "และจะส่งให้คุณทาง WhatsApp ในอีกครู่เดียวเท่านั้น ลาก่อน!"
+    )
+    _say(resp, msg, lang)
+    resp.hangup()
+    
+    # Note: Session is deleted inside the background thread once done.
     return _twiml(resp)
 
 
-def _extract_spoken_summary(plan_text: str, lang: str) -> str:
-    """Extract a short spoken version of the plan (first ~200 words)."""
-    lines = [l.strip() for l in plan_text.split("\n") if l.strip()]
-    excerpt = " ".join(lines[:8])[:600]
-    suffix = (
-        " Your full plan has been sent to your WhatsApp and SMS. Thank you for using AgriSpark!"
-        if lang == "EN"
-        else " แผนเต็มของคุณถูกส่งไปยัง WhatsApp และ SMS แล้ว ขอบคุณที่ใช้ AgriSpark!"
-    )
-    return excerpt + suffix
+def _process_complete(call_sid, lang, from_no, to_no):
+    """Heavy-lifting executed in background to satisfy Twilio timeouts."""
+    try:
+        system_nos = [config.TWILIO_PHONE.strip(), config.TWILIO_WHATSAPP.replace("whatsapp:", "").strip()]
+        farmer_no  = from_no
+        if from_no.strip() in system_nos:
+            farmer_no = to_no
+
+        sess = session.get(call_sid)
+        profile = {
+            "name":         sess.get("name",         "Farmer"),
+            "location":     sess.get("location",      "Unknown"),
+            "past_crop":    sess.get("past_crop",     "Unknown"),
+            "current_crop": sess.get("current_crop",  "Unknown"),
+            "soil_type":    sess.get("soil_type",     "Unknown"),
+            "terrain":      sess.get("terrain",       "Unknown"),
+        }
+
+        # 🏛️ Save to persistent archive
+        if farmer_no:
+            session.save_farmer_profile(farmer_no, profile)
+            print(f"📡 AGENTIC SYNC: Linked IVR data for {farmer_no}")
+
+        # 1. Weather
+        weather = get_weather_summary(profile["location"])
+
+        # 2. AI Plan
+        plan_text = gemini.generate_farm_plan(lang, profile, weather)
+
+        # 3. PDF
+        pdf_path = generate_pdf(profile, plan_text, lang)
+        pdf_url  = get_pdf_url(pdf_path)
+
+        # 4. SMS Summary
+        sms_text = generate_sms_summary(lang, profile, plan_text[:500])
+
+        # 5. Deliveries
+        if farmer_no:
+            print(f"📡 AGENTIC DELIVERY: Processing WhatsApp for {farmer_no}")
+            
+            try:
+                wa_body = gemini.generate_wa_summary(lang, plan_text)
+                send_whatsapp_pdf(farmer_no, wa_body, pdf_url)
+                print("✅ WhatsApp Sent!")
+            except Exception as e:
+                print(f"❌ WhatsApp Error: {e}")
+
+            try:
+                send_sms(farmer_no, sms_text)
+                print("✅ SMS Sent!")
+            except Exception as e:
+                print(f"❌ SMS Error: {e}")
+
+    except Exception as e:
+        print(f"❌ Background Processing Error: {e}")
+    finally:
+        session.delete(call_sid)
 
 
 # ─── Goodbye ─────────────────────────────────────────────────────────────────
