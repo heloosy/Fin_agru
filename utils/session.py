@@ -11,21 +11,11 @@ import time
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# --- Persistence Paths ---
-SESSIONS_FILE = os.path.join(DATA_DIR, "ivr_sessions.json")
 PROFILES_FILE = os.path.join(DATA_DIR, "profiles.json")
 HISTORY_FILE  = os.path.join(DATA_DIR, "wa_history.json")
 
-# Ephemeral store (now backed by file)
+# Ephemeral store
 _SESSIONS = {}
-
-def _ensure_sessions_loaded():
-    global _SESSIONS
-    if not _SESSIONS:
-        _SESSIONS = _load_json(SESSIONS_FILE)
-
-def _save_sessions():
-    _save_json(SESSIONS_FILE, _SESSIONS)
 
 # --- Persistent Loading/Saving ---
 
@@ -49,40 +39,30 @@ def _save_json(path, data):
 
 def get(session_id):
     """Retrieve session data by ID (CallSid or Phone). Returns dict."""
-    _ensure_sessions_loaded()
     return _SESSIONS.get(session_id, {})
 
 def set(session_id, data):
     """Set the entire session data for an ID."""
-    _ensure_sessions_loaded()
     _SESSIONS[session_id] = data
-    _save_sessions()
 
 def update(session_id, **kwargs):
     """Update specific fields in a session."""
-    _ensure_sessions_loaded()
     if session_id not in _SESSIONS:
         _SESSIONS[session_id] = {}
     _SESSIONS[session_id].update(kwargs)
-    _save_sessions()
 
 def delete(session_id):
     """Remove a session."""
-    _ensure_sessions_loaded()
     if session_id in _SESSIONS:
         del _SESSIONS[session_id]
-        _save_sessions()
 
 def get_lang(session_id):
-    _ensure_sessions_loaded()
     return _SESSIONS.get(session_id, {}).get("lang", "EN")
 
 def get_step(session_id):
-    _ensure_sessions_loaded()
     return _SESSIONS.get(session_id, {}).get("step", 1)
 
 def increment_step(session_id):
-    _ensure_sessions_loaded()
     curr = get_step(session_id)
     update(session_id, step=curr + 1)
 
