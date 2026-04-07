@@ -453,6 +453,16 @@ def detect_language(text: str) -> str:
 
 def split_message(text: str, limit: int = 1500) -> list:
     """Splits a long message into multiple chunks of roughly 1500 chars, ideally at paragraph breaks."""
+    import re
+    # Clean up markdown for WhatsApp to prevent "excess *" clutter
+    # 1. Convert standard Markdown bold (**text**) to WhatsApp bold (*text*)
+    text = text.replace("**", "*")
+    # 2. Fix broken WhatsApp bolding (remove spaces inside the asterisks: * text * -> *text*)
+    text = re.sub(r'\*\s+(.*?)\s+\*', r'*\1*', text)
+    # 3. Convert markdown asterisk bullet points (* item) to dash bullet points (- item)
+    # This prevents WhatsApp from confusing bullet points with bold markers.
+    text = re.sub(r'^(\s*)\*\s', r'\1- ', text, flags=re.MULTILINE)
+
     if len(text) <= limit:
         return [text]
     
