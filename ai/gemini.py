@@ -336,9 +336,12 @@ def analyze_image(lang: str, image_url: str, twilio_sid: str, twilio_token: str)
 
     except requests.exceptions.HTTPError as http_err:
         print(f"❌ IMAGE DOWNLOAD ERROR: {http_err}")
-        if response.status_code == 401:
-            return "Unable to analyze: Twilio Auth failed. Check ACCOUNT_SID/AUTH_TOKEN."
-        return f"Unable to analyze: Image download failed (Error {response.status_code})."
+        if response is not None and response.status_code == 401:
+            return "⚠️ Image analysis failed: Twilio Auth error. Please check your ACCOUNT_SID and AUTH_TOKEN in settings."
+        return f"⚠️ Image analysis failed: Download error ({http_err})."
+    except requests.exceptions.RequestException as req_err:
+        print(f"❌ NETWORK ERROR DURING VISION: {req_err}")
+        return "⚠️ Image analysis failed: Could not reach the photo server. Please try again in 30 seconds."
     except Exception as e:
         print(f"❌ MASTER VISION ERROR: {e}")
         return _handle_err(lang, e)
@@ -486,7 +489,16 @@ def split_message(text: str, limit: int = 1500) -> list:
 def _handle_err(lang: str, e: Exception) -> str:
     """Consistently handle errors and return a string."""
     # Always log the REAL error to the console so it's visible in server logs
-    print(f"🔴 _handle_err called: [{type(e).__name__}] {str(e)[:200]}")
+    err_type = type(e).__name__
+    err_msg = str(e)
+    print(f"🔴 _handle_err called: [{err_type}] {err_msg[:200]}")
+    
+    if _is_quota_error(e):
+        if lang == "TH":
+            return "ขอโทษครับ ตอนนี้ระบบ AI ไม่ว่างชั่วคราว กรุณาลองใหม่อีกครั้งในภายหลัง"
+        return "I'm sorry, my AI processing is currently at capacity. Please try your request again in a few moments!"
+
+    # Technical error (not quota)
     if lang == "TH":
-        return f"ขอโทษครับ ตอนนี้ระบบ AI ไม่ว่างชั่วคราว กรุณาลองใหม่อีกครั้งในภายหลัง"
-    return f"I'm sorry, my AI processing is currently at capacity. Please try your request again in a few moments!"
+        return f"⚠️ มีข้อผิดพลาดทางเทคนิค ({err_type}) กรุณาลองใหม่อีกครั้งครับ"
+    return f"⚠️ AI Thinking Hiccup ({err_type}). Please try that again!"
