@@ -36,9 +36,10 @@ _WORKING_MODEL_NAME = None
 
 
 def _is_quota_error(e: Exception) -> bool:
-    """True if this error means Gemini quota/rate-limit was exceeded → fall back to Groq."""
+    """True if this error means Gemini quota/rate-limit was exceeded."""
     msg = str(e).lower()
-    return any(k in msg for k in ["429", "quota", "resource exhausted", "rate limit", "too many requests"])
+    keywords = ["429", "quota", "resource exhausted", "rate limit", "too many requests", "no working gemini models"]
+    return any(k in msg for k in keywords)
 
 
 def _get_working_model(system_instruction=None):
@@ -196,9 +197,14 @@ def chat_reply(lang: str, message: str, history: list, profile: dict = None) -> 
         resp  = chat.send_message(message)
         return resp.text.strip()
     except Exception as e:
-        if _is_quota_error(e) and groq_client:
-            print(f"⚡ Gemini quota hit (chat_reply). Falling back to Groq...")
-            return _groq_chat(lang, message, history, system)
+        if _is_quota_error(e):
+            # 🔄 RE-PROBE: Maybe a different Gemini model is available?
+            global _WORKING_MODEL_NAME
+            _WORKING_MODEL_NAME = None 
+            
+            if groq_client:
+                print(f"⚡ Gemini quota hit (chat_reply). Falling back to Groq...")
+                return _groq_chat(lang, message, history, system)
         return _handle_err(lang, e)
 
 
@@ -418,9 +424,13 @@ def clean_ivr_answer(lang: str, field_key: str, transcript: str) -> str:
     prompt = f"""
     You are a data cleaner for an agricultural IVR. 
     Convert this messy spoken transcript for field '{field_key}' into a CLEAN, CONCISE value.
-    If the field is 'location', return ONLY the city or province name.
-    If the field is 'soil_type', return one of: [Sandy, Clay, Loam, Unknown].
-    If the field is 'terrain', return one of: [Flat, Hilly, Sloped, Near Water, Unknown].
+    - If the field is 'name', return ONLY the person's name (e.g., "John Doe").
+    - If the field is 'location', return ONLY the city or province name.
+    - If the field is 'soil_type', return one of: [Sandy, Clay, Loam, Unknown].
+    - If the field is 'terrain', return one of: [Flat, Hilly, Sloped, Near Water, Unknown].
+    - For crops ('past_crop', 'current_crop'), return the common name of the crop (e.g., "Rice").
+    
+    If you are absolutely unable to find any viable data, strictly return 'Unknown'.
     
     TRANSCRIPT: "{transcript}"
     
@@ -428,7 +438,7 @@ def clean_ivr_answer(lang: str, field_key: str, transcript: str) -> str:
     """
     try:
         model = _get_working_model()
-        resp = model.generate_content(prompt, generation_config={"max_output_tokens": 10})
+        resp = model.generate_content(prompt, generation_config={"max_output_tokens": 40})
         return resp.text.strip()
     except Exception as e:
         if groq_client:
